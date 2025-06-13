@@ -1,7 +1,7 @@
 # config.py
 
 # Serial communication settings
-SERIAL_PORT = "COM5"  # or "/dev/ttyUSB0" for Linux/macOS
+SERIAL_PORT = "COM8"  # or "/dev/ttyUSB0" for Linux/macOS
 BAUD_RATE = 9600
 
 # ==== Robot Leg Parameters ====
