@@ -15,8 +15,8 @@ config_dir = os.path.abspath(os.path.join(__file__, "../../.."))
 sys.path.append(config_dir)
 
 # Import the config module
-from config import BAUD_RATE
-from config import SERIAL_PORT
+BAUD_RATE=9600
+SERIAL_PORT="COM8"
 
 try:
     ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)

@@ -1,0 +1,8 @@
+Printer name: BIQU p1
+Tolerance   : 0.2mm
+for movable
+joints
+
+Tolerance   : 0.1mm
+for non-mova
+ble joints
