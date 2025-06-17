@@ -1,3 +1,5 @@
+import os
+import sys
 import time
 from datetime import datetime
 
@@ -7,6 +9,9 @@ import serial
 
 
 
+# Add the parent directory to the system path
+config_dir = os.path.abspath(os.path.join(__file__, "../../../.."))
+sys.path.append(config_dir)
 
 # Import the config module
 from config import BAUD_RATE_SEND
@@ -18,6 +23,7 @@ try:
 except Exception as e:
     ser = None
     print(f"⚠️ Could not connect to serial port: {e}")
+
 
 
 LEG1 = 100
@@ -201,7 +207,7 @@ class LegMovement():
                         print(f"Serial error: {e}")
                 else:
 
-                    print(f"Error: Serial port not available")
+                    print(f"Error: Serial port {SERIAL_PORT_SEND} not available")
 
             steps += 1
 
