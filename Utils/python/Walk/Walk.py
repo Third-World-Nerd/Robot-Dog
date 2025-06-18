@@ -17,12 +17,12 @@ from config import SERIAL_PORT_REC
 from config import SERIAL_PORT_SEND
 from config import STEP_LENGTH_X
 from config import STEP_LENGTH_Y
+from kinematics import inverse_kinematics
+from pid_leg_stabilizer import PIDLegStabilizer
+from serial_comm import SerialComm
 
+def pid_loop(foot_positions, foot_positions_lock, pitch_roll_setpoint, pitch_roll_setpoint_lock):
 
-def pid_loop(foot_positions, foot_positions_lock):
-    from kinematics import inverse_kinematics
-    from pid_leg_stabilizer import PIDLegStabilizer
-    from serial_comm import SerialComm
 
     try:
         imu_uc = SerialComm(SERIAL_PORT_REC, BAUD_RATE_REC, timeout=0.01)
@@ -47,7 +47,8 @@ def pid_loop(foot_positions, foot_positions_lock):
         kd_roll=0.01,
         integral_window=100,
     )
-    pid_leg.set_setpoint(0.0, 0.0)
+    with pitch_roll_setpoint_lock:
+        pid_leg.set_setpoint(pitch_roll_setpoint[0], pitch_roll_setpoint[1])
 
     sample_freq = 25.0
     loop_counter = 0
@@ -92,7 +93,8 @@ def pid_loop(foot_positions, foot_positions_lock):
         # For testing without motion:
         # pitch = 0.0
         # roll = 0.0
-        
+        with pitch_roll_setpoint_lock:
+            pid_leg.set_setpoint(pitch_roll_setpoint[0], pitch_roll_setpoint[1])
         deltas = pid_leg.compute_leg_deltas(pitch, roll, 1 / sample_freq)
         angle_values = []
         ik_failed = False
@@ -138,52 +140,129 @@ def pid_loop(foot_positions, foot_positions_lock):
         time.sleep(max(0, (1 / sample_freq) - loop_elapsed))
 
 
-def walk(foot_positions, foot_lock):
-    delay = 3.0
-    steps = [
-        ([0], 0, STEP_LENGTH_Y, pitch, roll),
-        ([0], -STEP_LENGTH_X, 0),
-        ([0], 0, -STEP_LENGTH_Y),
-        ([1], 0, STEP_LENGTH_Y),
-        ([1], -STEP_LENGTH_X, 0),
-        ([1], 0, -STEP_LENGTH_Y),
-        ([0, 1, 2, 3], STEP_LENGTH_X, 0),
-        ([2], 0, STEP_LENGTH_Y),
-        ([2], -STEP_LENGTH_X, 0),
-        ([2], 0, -STEP_LENGTH_Y),
-        ([3], 0, STEP_LENGTH_Y),
-        ([3], -STEP_LENGTH_X, 0),
-        ([3], 0, -STEP_LENGTH_Y),
-    ]
-    for legs, dx, dy in steps:
-        with foot_lock:
-            for leg in legs:
-                foot_positions[leg][0] += dx
-                foot_positions[leg][1] += dy
-        time.sleep(delay)
+# def walk(foot_positions, foot_lock):
+#     delay = 3.0
+#     steps = [
+#         ([0], 0, STEP_LENGTH_Y, pitch, roll),
+#         ([0], -STEP_LENGTH_X, 0),
+#         ([0], 0, -STEP_LENGTH_Y),
+#         ([1], 0, STEP_LENGTH_Y),
+#         ([1], -STEP_LENGTH_X, 0),
+#         ([1], 0, -STEP_LENGTH_Y),
+#         ([0, 1, 2, 3], STEP_LENGTH_X, 0),
+#         ([2], 0, STEP_LENGTH_Y),
+#         ([2], -STEP_LENGTH_X, 0),
+#         ([2], 0, -STEP_LENGTH_Y),
+#         ([3], 0, STEP_LENGTH_Y),
+#         ([3], -STEP_LENGTH_X, 0),
+#         ([3], 0, -STEP_LENGTH_Y),
+#     ]
+#     for legs, dx, dy in steps:
+#         with foot_lock:
+#             for leg in legs:
+#                 foot_positions[leg][0] += dx
+#                 foot_positions[leg][1] += dy
+#         time.sleep(delay)
 
+def walk(foot_positions, legs, dx, dy, foot_lock):
+    with foot_lock:
+        for leg in legs:
+            foot_positions[leg][0] += dx
+            foot_positions[leg][1] += dy
+
+def tilt_body(pitch_roll_setpoint, pitch_roll_setpoint_lock, pitch_setpoint, roll_setpoint):
+    with pitch_roll_setpoint_lock:
+        pitch_roll_setpoint[0] = pitch_setpoint
+        pitch_roll_setpoint[1] = roll_setpoint
 
 import threading
 
 if __name__ == "__main__":
     foot_positions = [list(pos) for pos in FOOT_POSITIONS_WALK]
-
+    pitch_roll_setpoint = [0.0, 0.0]
     foot_positions_lock = threading.Lock()
+    pitch_roll_setpoint_lock = threading.Lock()
 
     # Start PID loop in a separate thread
     pid_thread = threading.Thread(
-        target=pid_loop, args=(foot_positions, foot_positions_lock)
+        target=pid_loop, args=(foot_positions, foot_positions_lock, pitch_roll_setpoint, pitch_roll_setpoint_lock)
     )
     pid_thread.daemon = True  # Thread exits when main thread exits
     pid_thread.start()
 
-    time.sleep(2)  # Optional: Let the PID loop stabilize first
+    time.sleep(10)  # Optional: Let the PID loop stabilize first
+
+    tilt_angle = 7
+    delay = 3
+    walk_delay = 1
+
+    # tilt_body(pitch_roll_setpoint, pitch_roll_setpoint_lock, tilt_angle, -tilt_angle)
+    # time.sleep(delay)
+    # walk(foot_positions, [0], 0, STEP_LENGTH_Y,foot_positions_lock)
+    # time.sleep(walk_delay)
+    # walk(foot_positions, [0], -STEP_LENGTH_X, 0,foot_positions_lock)
+    # walk(foot_positions, [1,2,3], STEP_LENGTH_X/4, 0,foot_positions_lock)
+    # time.sleep(walk_delay)
+    # walk(foot_positions, [0], 0, -STEP_LENGTH_Y,foot_positions_lock)
+    # time.sleep(walk_delay)
+    # tilt_body(pitch_roll_setpoint, pitch_roll_setpoint_lock, 0, 0)
+    # time.sleep(delay)
+
+    # tilt_body(pitch_roll_setpoint, pitch_roll_setpoint_lock, tilt_angle, tilt_angle)
+    # time.sleep(delay)
+    # walk(foot_positions, [1], 0, STEP_LENGTH_Y,foot_positions_lock)
+    # time.sleep(walk_delay)
+    # walk(foot_positions, [1], -STEP_LENGTH_X, 0,foot_positions_lock)
+    # walk(foot_positions, [0,2,3], STEP_LENGTH_X/4, 0,foot_positions_lock)
+    # time.sleep(walk_delay)
+    # walk(foot_positions, [1], 0, -STEP_LENGTH_Y,foot_positions_lock)
+    # time.sleep(walk_delay)
+    # tilt_body(pitch_roll_setpoint, pitch_roll_setpoint_lock, 0, 0)
+    # time.sleep(delay)
+
+    # tilt_body(pitch_roll_setpoint, pitch_roll_setpoint_lock, -tilt_angle-6, tilt_angle+4)
+    # time.sleep(delay)
+    # walk(foot_positions, [3], 0, STEP_LENGTH_Y,foot_positions_lock)
+    # # time.sleep(walk_delay)
+    # walk(foot_positions, [3], -STEP_LENGTH_X, 0,foot_positions_lock)
+    # walk(foot_positions, [0,1,2], STEP_LENGTH_X/4, 0,foot_positions_lock)
+    # time.sleep(walk_delay)
+    # walk(foot_positions, [3], 0, -STEP_LENGTH_Y,foot_positions_lock)
+    # time.sleep(walk_delay)
+    # tilt_body(pitch_roll_setpoint, pitch_roll_setpoint_lock, 0, 0)
+    # time.sleep(delay)
+
+
+    # tilt_body(pitch_roll_setpoint, pitch_roll_setpoint_lock, -tilt_angle-6, -tilt_angle-4)
+    # time.sleep(delay)
+    # walk(foot_positions, [2], 0, STEP_LENGTH_Y,foot_positions_lock)
+    # # time.sleep(walk_delay)
+    # walk(foot_positions, [2], -STEP_LENGTH_X, 0,foot_positions_lock)
+    # walk(foot_positions, [0,1,3], STEP_LENGTH_X/4, 0,foot_positions_lock)
+    # time.sleep(walk_delay)
+    # walk(foot_positions, [2], 0, -STEP_LENGTH_Y,foot_positions_lock)
+    # time.sleep(walk_delay)
+    # tilt_body(pitch_roll_setpoint, pitch_roll_setpoint_lock, 0, 0)
+    # time.sleep(delay)
+
+
+    tilt_body(pitch_roll_setpoint, pitch_roll_setpoint_lock, -tilt_angle, -tilt_angle)
+    time.sleep(delay)
+    walk(foot_positions, [2], 0, STEP_LENGTH_Y,foot_positions_lock)
+    # time.sleep(walk_delay)
+    walk(foot_positions, [2], STEP_LENGTH_X, 0,foot_positions_lock)
+    walk(foot_positions, [0,1,3], -STEP_LENGTH_X/4, 0,foot_positions_lock)
+    time.sleep(walk_delay)
+    walk(foot_positions, [2], 0, -STEP_LENGTH_Y,foot_positions_lock)
+    time.sleep(walk_delay)
+    tilt_body(pitch_roll_setpoint, pitch_roll_setpoint_lock, 0, 0)
+    time.sleep(delay)
 
     time.sleep(10)
 
     # # Now you can walk while the PID thread is running
-    for _ in range(3):
-        walk(foot_positions, foot_positions_lock)
-        time.sleep(1)
+    # for _ in range(3):
+    #     walk(foot_positions, foot_positions_lock)
+    #     time.sleep(1)
 
     # Main thread exits → PID thread exits too
